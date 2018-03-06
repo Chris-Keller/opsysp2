@@ -6,7 +6,7 @@ struct node{
 
 	unsigned address;
 	int dirty;
-
+   int time_since_last_use;
 };
 
 void LRU(FILE * trace, struct node array[], int amount);
@@ -40,6 +40,10 @@ int main(int argc, char * argv[]){
 	}
 
 	else if(strcmp(argv[3], "VMS") == 0){
+      if (strcmp(argv[1], "gcc.trace") != 0){
+         printf("Error: Attempted to call VMS with non-gcc trace!  Aborting.\n");
+         exit(1);
+      }
 		VMS(trace, amount);
 
 	}
@@ -151,7 +155,6 @@ void FIFO(FILE* trace, struct node array[], int amount){
 		//printf("%u, %c\n",tempaddr ,tempc);
 
 		int hit = 0;
-
 		for(int j = 0; j < amount; j++){
 			if(tempaddr == array[j].address){
 				//printf("address hit!\n");
@@ -164,15 +167,13 @@ void FIFO(FILE* trace, struct node array[], int amount){
 			//do nothing
 			//printf("hit\n");
 			
-		}
-		else {
+		} else {
 			reads++;
+
 			if(array[i].dirty == 1)
 				writes++;
 
 			array[i].address = tempaddr;
-
-			//printf("%u, %c\n",array[i].address ,array[i].rw);
 
 			if(tempc == 'W')
 				array[i].dirty = 1;
@@ -209,53 +210,172 @@ void VMS(FILE* trace, int amount){
 	struct node dirty[(amount/2)+1];
 	struct node clean[(amount/2)+1];
 	unsigned memory[amount];
-	unsigned tempaddr;
 	char tempc;
 	int track = 0;
+   int p1_indicator_slot = 0;
+   int p2_indicator_slot = 0;
+   int dirty_indicator_slot = 0;
+   int clean_indicator_slot = 0;
 
-
-	for(int i = 0; i < (amount/2); i++){
-		p1[i].dirty = 0;
-		p1[i].address = 0;
-		p2[i].dirty = 0;
-		p2[i].address = 0;
+	for(int i = 0; i < (amount / 2); i++){
+		p1[i].dirty       = -1;
+		p1[i].address     = -1;
+		p2[i].dirty       = -1;
+		p2[i].address     = -1;
 	}
-	for(int i = 0; i < ((amount/2)+1); i++){
-		dirty[i].dirty =1 ;
-		dirty[i].address = 0;
-		clean[i].dirty = 0;
-		clean[i].address = 0;
+	for(int i = 0; i < ((amount / 2) + 1); i++){
+		dirty[i].dirty    = -1;
+		dirty[i].address  = -1;
+		clean[i].dirty    = -1;
+		clean[i].address  = -1;
 	}
-
+   for (int i = 0; i < amount; i++)
+      memory[i] = -1;
 	
 
 	while(track != 1000000){
 
-		fscanf(trace,"%x %c", &tempaddr, &tempc);
-		tempaddr = tempaddr >> 12;
+      // Get the page from the address
+      struct node new_page;
+		fscanf(trace,"%x %c", &new_page.address, &tempc);
+		new_page.address = new_page.address >> 12;
+      if (tempc == 'R')
+         new_page.dirty = 0;
+      else if (tempc == 'W')
+         new_page.dirty = 1;
+      else
+         printf("PANIC R/W\n");
 
-		//if it falls in this range it belongs to p2
-		if(tempaddr > 0x2AAAA && tempaddr < 0x40000){
+      int hit = 0;
+      struct node evicted_page;
 
-			for(int i = 0; i <(amount/2);i++){
-				if(tempaddr == p2[i].address){
-					//do nothing
-				}
-				else{
-					
-				}
+		// Address was called by p1
+		if(new_page.address > 0x2FFFF && new_page.address < 0x40000){
+			for(int i = 0; i < (amount / 2); i++){
+				if(new_page.address == p1[i].address)
+					hit = 1;
+               break;
 			}
+         if (hit == 0){
+         // Handle the page fault on p1 (save the current eviction target and place new page there, cycle p1 indicator)
+            evicted_page = p1[p1_indicator_slot];
+            p1[p1_indicator_slot] = new_page;
+            p1_indicator_slot++;
+            if (p1_indicator_slot >= amount / 2)
+               p1_indicator_slot = 0;
+         }
+		} 
+
+      // Address was called by P2
+      else {
+			for(int i = 0; i < (amount / 2); i++){
+				if(new_page.address == p2[i].address)
+					hit = 1;
+               break;
+			}
+         if (hit == 0){
+         // Handle the page fault on p2 (save the current eviction target and place new page there, cycle p2 indicator)
+            evicted_page = p2[p2_indicator_slot];
+            p2[p2_indicator_slot] = new_page;
+            p2_indicator_slot++;
+            if (p2_indicator_slot >= amount / 2)
+               p2_indicator_slot = 0;
+
+         }
+      }
 
 
 
-		}
 
-		//
-		else{
+      // If we evicted a page, send it to clean or dirty
+      if (evicted_page.address != -1){
+         if (evicted_page.dirty == 0){
+            clean[clean_indicator_slot] = evicted_page;
+            clean_indicator_slot++;
+            if (clean_indicator_slot >= amount / 2 + 1)
+               clean_indicator_slot = 0;
+         }
+         else if (evicted_page.dirty == 1){
+            dirty[dirty_indicator_slot] = evicted_page;
+            dirty_indicator_slot++;
+            if (dirty_indicator_slot >= amount / 2 + 1)
+               dirty_indicator_slot = 0;
+         }
+         else
+            printf("PANIC invalid dirty value\n");
+      }
 
 
-		}
+      // If the new page is already in memory, it must be in clean/dirty, remove it from Clean/Dirty
+         hit = 0;
+         for (int i = 0; i < amount; i++){
+            if (new_page.address == memory[i]){
+               hit = 1;
+               break;
+            }
+         }
+         // If we found the page in memory, scan dirty/clean and remove
+         if (hit == 1){
+            for (int i = 0; i < amount / 2 + 1; i++){
+               // WE MIGHT NEED TO MOVE ALL ARRAY ENTRIES BELOW UP A SLOT------------------------
+               if (new_page.address == clean[i].address){
+                  clean[i].address = -1;
+                  clean[i].dirty= -1;
+                  break;
+               }
+               if (new_page.address == dirty[i].address){
+                  dirty[i].address = -1;
+                  dirty[i].dirty= -1;
+                  break;
+               }
+            }
+         }
+         // If not in memory, put into memory if free space, otherwise seek a page from Clean/Dirty to remove to get space
+         else {         
+            hit = 0;
+            for (int i = 0; i < amount; i++){
+               if (memory[i] == -1){
+                  memory[i] = new_page.address;
+                  hit = 1;
+               } 
+            }
 
+            int is_done = 0;
+            if (hit == 0){
+               // Scan through Clean for a page to free from memory, then Dirty
+               for (int i = 0; i < amount / 2 + 1; i++){
+                  if (clean[i].address != -1){
+                     // Found a page to remove.  Remove it from memory and add new_page there, eliminate here
+                     for (int j = 0; j < amount; j++){
+                        if (memory[j] == clean[i].address){
+                           memory[j] = new_page.address;
+                           clean[i].address = -1;
+                           clean[i].dirty= -1;
+                           is_done = 1;
+                           break;
+                        }
+                     }
+                  }
+               }
+
+               if (is_done == 0){
+                  for (int i = 0; i < amount / 2 + 1; i++){
+                     if (dirty[i].address != -1){
+                        // Found a page to remove.  Remove it from memory and add new_page there, eliminate here
+                        for (int j = 0; j < amount; j++){
+                           if (memory[j] == dirty[i].address){
+                              memory[j] = new_page.address;
+                              dirty[i].address = -1;
+                              dirty[i].dirty= -1;
+                              break;
+                           }
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      
 
 		track++;
 	}

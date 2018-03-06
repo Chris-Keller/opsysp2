@@ -29,9 +29,6 @@ int main(int argc, char * argv[]){
 	if(trace == NULL)
 		printf("error no such file found!\n");
 
-	//printf("%s\n",argv[1] );
-
-	//fscanf(trace,"%x, %c", array[i].adress, array[i].rw);
 
 	if(strcmp(argv[3], "LRU") == 0){
 		LRU(trace, array, amount);
@@ -237,8 +234,24 @@ void VMS(FILE* trace, int amount){
 		fscanf(trace,"%x %c", &tempaddr, &tempc);
 		tempaddr = tempaddr >> 12;
 
-		if(tempaddr > 2999 && tempaddr < 4000){
+		//if it falls in this range it belongs to p2
+		if(tempaddr > 0x2AAAA && tempaddr < 0x40000){
 
+			for(int i = 0; i <(amount/2);i++){
+				if(tempaddr == p2[i].address){
+					//do nothing
+				}
+				else{
+					
+				}
+			}
+
+
+
+		}
+
+		//
+		else{
 
 
 		}

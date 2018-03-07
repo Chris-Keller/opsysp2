@@ -4,7 +4,7 @@
 
 struct node{
 
-	unsigned address;
+	unsigned int address;
 	int dirty;
     int time_since_last_use;
 
@@ -259,9 +259,10 @@ void VMS(FILE* trace, int amount){
 		// Address was called by p1
 		if(new_page.address > 0x2FFFF && new_page.address < 0x40000){
 			for(int i = 0; i < (amount / 2); i++){
-				if(new_page.address == p1[i].address)
+				if(new_page.address == p1[i].address){
 					hit = 1;
                break;
+            }
 			}
          if (hit == 0){
          // Handle the page fault on p1 (save the current eviction target and place new page there, cycle p1 indicator)
@@ -276,9 +277,12 @@ void VMS(FILE* trace, int amount){
       // Address was called by P2
       else {
 			for(int i = 0; i < (amount / 2); i++){
-				if(new_page.address == p2[i].address)
+//unsigned int temp = new_page.address;
+//printf("NewAddr = %x, P2[i] = %x\n", temp, p1[i].address);
+				if(new_page.address == p2[i].address){
 					hit = 1;
                break;
+            }
 			}
          if (hit == 0){
          // Handle the page fault on p2 (save the current eviction target and place new page there, cycle p2 indicator)
@@ -289,11 +293,13 @@ void VMS(FILE* trace, int amount){
                p2_indicator_slot = 0;
 
          }
+//printf("P2.  Hit: %d\n", hit);
       }
 
 
 
-
+      // On a whiff, do all this stuff
+      if (hit == 0){
       // If we evicted a page, send it to clean or dirty
       if (evicted_page.address != -1){
          if (evicted_page.dirty == 0){
@@ -313,80 +319,79 @@ void VMS(FILE* trace, int amount){
       }
 
          // If the new page is already in memory, it must be in clean/dirty, remove it from Clean/Dirty
-         hit = 0;
-         for (int i = 0; i < amount; i++){
-            if (new_page.address == memory[i]){
-               hit = 1;
+      hit = 0;
+      for (int i = 0; i < amount; i++){
+         if (new_page.address == memory[i]){
+            hit = 1;
+            break;
+         }
+      }
+      // If we found the page in memory, scan dirty/clean and remove
+      if (hit == 1){
+         for (int i = 0; i < amount / 2 + 1; i++){
+            // WE MIGHT NEED TO MOVE ALL ARRAY ENTRIES BELOW UP A SLOT------------------------
+            if (new_page.address == clean[i].address){
+               clean[i].address = -1;
+               clean[i].dirty= -1;
+               break;
+            }
+            if (new_page.address == dirty[i].address){
+               dirty[i].address = -1;
+               dirty[i].dirty= -1;
                break;
             }
          }
-         // If we found the page in memory, scan dirty/clean and remove
-         if (hit == 1){
-            for (int i = 0; i < amount / 2 + 1; i++){
-               // WE MIGHT NEED TO MOVE ALL ARRAY ENTRIES BELOW UP A SLOT------------------------
-               if (new_page.address == clean[i].address){
-                  clean[i].address = -1;
-                  clean[i].dirty= -1;
-                  break;
-               }
-               if (new_page.address == dirty[i].address){
-                  dirty[i].address = -1;
-                  dirty[i].dirty= -1;
-                  break;
-               }
-            }
-         }
-         // If not in memory, put into memory if free space, otherwise seek a page from Clean/Dirty to remove to get space
-         else { 
+      }
+      // If not in memory, put into memory if free space, otherwise seek a page from Clean/Dirty to remove to get space
+      else { 
          	
-         	reads++;
-            hit = 0;
-            for (int i = 0; i < amount; i++){
-               if (memory[i] == -1){
-                  memory[i] = new_page.address;
-                  hit = 1;
-               } 
+       	reads++;
+         hit = 0;
+         for (int i = 0; i < amount; i++){
+            if (memory[i] == -1){
+               memory[i] = new_page.address;
+               hit = 1;
+            } 
+         }
+
+         int is_done = 0;
+
+         if (hit == 0){
+            // Scan through Clean for a page to free from memory, then Dirty
+            for (int i = 0; i < amount / 2 + 1; i++){
+               if (clean[i].address != -1){
+                  // Found a page to remove.  Remove it from memory and add new_page there, eliminate here
+                  for (int j = 0; j < amount; j++){
+                     if (memory[j] == clean[i].address){
+                        memory[j] = new_page.address;
+                        clean[i].address = -1;
+                        clean[i].dirty= -1;
+                        is_done = 1;
+                        break;
+                     }
+                  }
+               }
             }
 
-            int is_done = 0;
-
-            if (hit == 0){
-               // Scan through Clean for a page to free from memory, then Dirty
+            if (is_done == 0){
                for (int i = 0; i < amount / 2 + 1; i++){
-                  if (clean[i].address != -1){
+                  if (dirty[i].address != -1){
                      // Found a page to remove.  Remove it from memory and add new_page there, eliminate here
                      for (int j = 0; j < amount; j++){
-                        if (memory[j] == clean[i].address){
+                        if (memory[j] == dirty[i].address){
+                     	   writes++;
                            memory[j] = new_page.address;
-                           clean[i].address = -1;
-                           clean[i].dirty= -1;
-                           is_done = 1;
+                           dirty[i].address = -1;
+                           dirty[i].dirty= -1;
                            break;
                         }
                      }
                   }
                }
-
-               if (is_done == 0){
-                  for (int i = 0; i < amount / 2 + 1; i++){
-                     if (dirty[i].address != -1){
-                        // Found a page to remove.  Remove it from memory and add new_page there, eliminate here
-                        for (int j = 0; j < amount; j++){
-                           if (memory[j] == dirty[i].address){
-                           	  writes++;
-                              memory[j] = new_page.address;
-                              dirty[i].address = -1;
-                              dirty[i].dirty= -1;
-                              break;
-                           }
-                        }
-                     }
-                  }
-               }
             }
          }
-      
-
+      }
+      }
 		track++;
 	}
 

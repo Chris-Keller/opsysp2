@@ -6,7 +6,8 @@ struct node{
 
 	unsigned address;
 	int dirty;
-   int time_since_last_use;
+    int time_since_last_use;
+
 };
 
 void LRU(FILE * trace, struct node array[], int amount);
@@ -252,6 +253,8 @@ void VMS(FILE* trace, int amount){
 
       int hit = 0;
       struct node evicted_page;
+      evicted_page.address = -1;
+      evicted_page.dirty = -1;
 
 		// Address was called by p1
 		if(new_page.address > 0x2FFFF && new_page.address < 0x40000){
@@ -309,8 +312,7 @@ void VMS(FILE* trace, int amount){
             printf("PANIC invalid dirty value\n");
       }
 
-
-      // If the new page is already in memory, it must be in clean/dirty, remove it from Clean/Dirty
+         // If the new page is already in memory, it must be in clean/dirty, remove it from Clean/Dirty
          hit = 0;
          for (int i = 0; i < amount; i++){
             if (new_page.address == memory[i]){
@@ -335,7 +337,9 @@ void VMS(FILE* trace, int amount){
             }
          }
          // If not in memory, put into memory if free space, otherwise seek a page from Clean/Dirty to remove to get space
-         else {         
+         else { 
+         	
+         	reads++;
             hit = 0;
             for (int i = 0; i < amount; i++){
                if (memory[i] == -1){
@@ -345,6 +349,7 @@ void VMS(FILE* trace, int amount){
             }
 
             int is_done = 0;
+
             if (hit == 0){
                // Scan through Clean for a page to free from memory, then Dirty
                for (int i = 0; i < amount / 2 + 1; i++){
@@ -368,6 +373,7 @@ void VMS(FILE* trace, int amount){
                         // Found a page to remove.  Remove it from memory and add new_page there, eliminate here
                         for (int j = 0; j < amount; j++){
                            if (memory[j] == dirty[i].address){
+                           	  writes++;
                               memory[j] = new_page.address;
                               dirty[i].address = -1;
                               dirty[i].dirty= -1;

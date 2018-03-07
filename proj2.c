@@ -77,7 +77,7 @@ void LRU(FILE* trace,struct node array[], int amount){
 		int j = 0;
 		for(;j < amount; j++){
 			if(new_page.address == array[j].address){
-				//printf("address hit!\n");
+	
 				hit = 1;
 				break;
 			}
@@ -85,18 +85,6 @@ void LRU(FILE* trace,struct node array[], int amount){
 
 		//if page is loaded reset the timer to 0
 		if(hit == 1){
-			//do nothing
-			//printf("hit\n");
-				/*
-				for(int k = 0; k < amount; k++){
-				
-					if(k == i){
-						//do nothing
-					}
-					else
-						array[k % amount] = array[(k+1) % amount];
-				}*/
-
 			
 				array[j].time_since_last_use = 0;
 				for(int i = 0; i < amount; i++){
@@ -134,17 +122,12 @@ void LRU(FILE* trace,struct node array[], int amount){
 					array[i].time_since_last_use++;
 			}
 
-			
 
 			if(tempc == 'W')
 				array[loc].dirty = 1;
 			else
 				array[loc].dirty = 0;
-			/*
-			if(i == amount)
-				i = 0;
-			else
-				i++;*/
+			
 		}
 		
 

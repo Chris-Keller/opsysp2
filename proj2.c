@@ -330,7 +330,6 @@ void VMS(FILE* trace, int amount){
                if (new_page.address == dirty[i].address){
                   dirty[i].address = -1;
                   dirty[i].dirty= -1;
-                  writes++;
                   break;
                }
             }

@@ -60,74 +60,93 @@ int main(int argc, char * argv[]){
 void LRU(FILE* trace,struct node array[], int amount){
 	int reads = 0;
 	int writes = 0;
-	int i = 0;
 	int track = 0;
-	unsigned tempaddr;
 	char tempc;
-	int hitloc = 0;
-	struct node temp;
+	
 
 	while(track != 1000000){
 
-		fscanf(trace,"%x %c", &tempaddr, &tempc);
-		tempaddr = tempaddr >> 12;
+		struct node new_page;
+		fscanf(trace,"%x %c", &new_page.address, &tempc);
+		new_page.address = new_page.address >> 12;
 
-		//printf("%u, %c\n",tempaddr ,tempc);
-
+		
 		int hit = 0;
 
-		for(int j = 0; j < amount; j++){
-			if(tempaddr == array[j].address){
+		//check to see if the page is already loded
+		int j = 0;
+		for(;j < amount; j++){
+			if(new_page.address == array[j].address){
 				//printf("address hit!\n");
 				hit = 1;
-				hitloc = j;
-				temp = array[j];
 				break;
 			}
 		}
 
+		//if page is loaded reset the timer to 0
 		if(hit == 1){
 			//do nothing
 			//printf("hit\n");
-				
-				
+				/*
 				for(int k = 0; k < amount; k++){
 				
-					if(k >= i && k < hitloc){
+					if(k == i){
 						//do nothing
 					}
 					else
 						array[k % amount] = array[(k+1) % amount];
+				}*/
+
+			
+				array[j].time_since_last_use = 0;
+				for(int i = 0; i < amount; i++){
+					if(i != j)
+						array[i].time_since_last_use++;
 				}
 
-				array[(((i-1) + amount) % amount)] = temp;
 		}
+
+		//if the page isn't loaded add it and increment all the old entries timers
 		else {
 			reads++;
-			if(array[i].dirty == 1)
+
+
+			int oldest = 0;
+			int loc = 0;
+
+			for(int j = 0; j < amount; j++){
+
+				if(array[j].time_since_last_use > oldest){
+					oldest = array[j].time_since_last_use;
+					loc = j;
+				}
+
+			}
+
+			if(array[loc].dirty == 1)
 				writes++;
 
-			array[i].address = tempaddr;
+			array[loc].address = new_page.address;
+			array[loc].time_since_last_use = 0;
 
-			//printf("%u, %c\n",array[i].address ,array[i].rw);
+			for(int i = 0; i < amount; i++){
+				if(i != loc)
+					array[i].time_since_last_use++;
+			}
+
+			
 
 			if(tempc == 'W')
-				array[i].dirty = 1;
+				array[loc].dirty = 1;
 			else
-				array[i].dirty = 0;
-		
+				array[loc].dirty = 0;
+			/*
 			if(i == amount)
 				i = 0;
 			else
-				i++;
+				i++;*/
 		}
-
-		//printf("%c \n",array[i].rw );
 		
-
-		/*if(track%10000 == 0)
-			printf("current %i reads, %i writes\n",reads ,writes );
-		*/
 
 		track++;
 	}
@@ -144,19 +163,19 @@ void FIFO(FILE* trace, struct node array[], int amount){
 	int writes = 0;
 	int i = 0;
 	int track = 0;
-	unsigned tempaddr;
 	char tempc;
 
 	while(track != 1000000){
 
-		fscanf(trace,"%x %c", &tempaddr, &tempc);
-		tempaddr = tempaddr >> 12;
+		struct node new_page;
+		fscanf(trace,"%x %c", &new_page.address, &tempc);
+		new_page.address = new_page.address >> 12;
 
-		//printf("%u, %c\n",tempaddr ,tempc);
+		
 
 		int hit = 0;
 		for(int j = 0; j < amount; j++){
-			if(tempaddr == array[j].address){
+			if(new_page.address == array[j].address){
 				//printf("address hit!\n");
 				hit = 1;
 				break;
@@ -173,7 +192,7 @@ void FIFO(FILE* trace, struct node array[], int amount){
 			if(array[i].dirty == 1)
 				writes++;
 
-			array[i].address = tempaddr;
+			array[i].address = new_page.address;
 
 			if(tempc == 'W')
 				array[i].dirty = 1;
@@ -216,6 +235,8 @@ void VMS(FILE* trace, int amount){
    int p2_indicator_slot = 0;
    int dirty_indicator_slot = 0;
    int clean_indicator_slot = 0;
+   int writes = 0;
+   int reads = 0;
 
 	for(int i = 0; i < (amount / 2); i++){
 		p1[i].dirty       = -1;
@@ -326,6 +347,7 @@ void VMS(FILE* trace, int amount){
                if (new_page.address == dirty[i].address){
                   dirty[i].address = -1;
                   dirty[i].dirty= -1;
+                  writes++;
                   break;
                }
             }
@@ -379,5 +401,10 @@ void VMS(FILE* trace, int amount){
 
 		track++;
 	}
+
+	printf("total memory frames: %i\n",amount);
+	printf("events in traces: %i\n",track);
+	printf("total disk reads: %i\n",reads);
+	printf("total disk writes: %i\n",writes);
 
 }

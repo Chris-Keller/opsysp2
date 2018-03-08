@@ -1,0 +1,6 @@
+To operate this program simply compile using the make command by entering 'make'.
+Afterwards the format for the command line looks like:
+./memsim "name of trace file" "# frames"
+
+in this implementation we didn't have time to make a debugger otherwise you would also have a fourth agrument for quite or not.
+
